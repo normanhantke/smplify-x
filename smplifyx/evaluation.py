@@ -7,6 +7,8 @@ import os.path as osp
 import numpy as np
 import pickle
 import yaml
+from scipy.spatial import procrustes
+from scipy.linalg import orthogonal_procrustes
 
 import trimesh
 import configargparse
@@ -55,20 +57,27 @@ def evaluate_results(**args):
     errors["v2v_error"] = np.zeros( len(ground_truth_meshes) )
     errors["joint_error"] = np.zeros( len(ground_truth_meshes) )
     for i, data in enumerate(dataset_obj):
-        print (i)
         errors["v2v_error"][i] = v2v_error( ground_truth_meshes[i], os.path.join( result_meshes[i], "000.obj" ) )
         errors["joint_error"][i] = joint_error( data, os.path.join( result_results[i], "000.pkl" ), vp, joint_mapper, **cfg )
 
     with open( os.path.join( SMPLifyX_output_folder, "errors.pkl" ), 'wb' ) as handle:
         pickle.dump( errors, handle )
 
+    print( "Mean v2v_error:", errors["v2v_error"].mean() )
+    print( "Mean joint_error:", errors["joint_error"].mean())
+
 
 def v2v_error( mesh_1, mesh_2 ):
     mesh_1_vertices = trimesh.load_mesh(mesh_1).vertices
     mesh_2_vertices = trimesh.load_mesh(mesh_2).vertices
 
+    norm1 = np.linalg.norm(mesh_1_vertices)
+
+    mesh_1_vertices, mesh_2_vertices, _ = procrustes( mesh_1_vertices, mesh_2_vertices )
+
     v2v_error = np.linalg.norm( mesh_1_vertices-mesh_2_vertices, axis=1 ).mean()
 
+    return v2v_error
 
 def joint_error( joints_1, joints_2, vp, joint_mapper, **args ):
 
@@ -93,9 +102,16 @@ def joint_error( joints_1, joints_2, vp, joint_mapper, **args ):
                 right_hand_pose=torch.from_numpy(results["right_hand_pose"]) )
     results_joints = x.joints
 
-    keypoints = joints_1['keypoints']
+    joints_1 = joints_1['keypoints'][0]
+    joints_2 = results_joints.cpu().detach().numpy()[0]
 
-    1/0
+    norm1 = np.linalg.norm(joints_1)
+
+    joints_1, joints_2, _ = procrustes( joints_1, joints_2 )
+
+    joint_error = np.linalg.norm( joints_1 - joints_2, axis=1 ).mean()
+
+    return joint_error
 
 def parse_config(argv=None):
     arg_formatter = configargparse.ArgumentDefaultsHelpFormatter
@@ -113,7 +129,8 @@ def parse_config(argv=None):
     parser.add_argument('--SMPLifyX_output_folder',
                         required=True,
                         help='The directory that contains the SMPLify-X output that is to be evaluated.')
-
+    parser.add_argument('--vposer_ckpt', type=str, default='',
+                        help='The path to the V-Poser checkpoint')
     args = parser.parse_args()
     args_dict = vars(args)
     return args_dict
