@@ -1,14 +1,12 @@
 
 import sys
 import os
-
 import os.path as osp
 
 import numpy as np
 import pickle
 import yaml
 from scipy.spatial import procrustes
-from scipy.linalg import orthogonal_procrustes
 
 import trimesh
 import configargparse
@@ -18,13 +16,18 @@ from human_body_prior.tools.model_loader import load_vposer
 
 import utils
 from data_parser import create_dataset
+from camera import create_camera
+
+
+# ground_truth camera parameters for the EHF dataset:
+EHF_GT_CAMERA_FOCAL_LENGTH = np.array([1498.22426237, 1498.22426237], dtype=np.float32)
+EHF_GT_CAMERA_CENTER = np.array([[790.263706, 578.90334 ]], dtype=np.float32)
+EHF_GT_CAMERA_ROTATION = np.array([[[-2.98747896,0,0], [0, 0.01172457, 0], [0,0, -0.05704687]]], dtype=np.float32)
+EHF_GT_CAMERA_TRANSLATION = np.array([[-0.03609917, 0.43416458, 2.37101226]], dtype=np.float32)
+
+
 
 ##### this code assumes that there is only one person detected in each image
-
-########################################
-##### TODO PROCRUSTES ALIGNMENT ########
-########################################
-
 
 def evaluate_results(**args):
 
@@ -57,8 +60,8 @@ def evaluate_results(**args):
     errors["v2v_error"] = np.zeros( len(ground_truth_meshes) )
     errors["joint_error"] = np.zeros( len(ground_truth_meshes) )
     for i, data in enumerate(dataset_obj):
-        errors["v2v_error"][i] = v2v_error( ground_truth_meshes[i], os.path.join( result_meshes[i], "000.obj" ) )
-        errors["joint_error"][i] = joint_error( data, os.path.join( result_results[i], "000.pkl" ), vp, joint_mapper, **cfg )
+        errors["v2v_error"][i], model_scale_to_meter_scale_factor = v2v_error( ground_truth_meshes[i], os.path.join( result_meshes[i], "000.obj" ) )
+        errors["joint_error"][i] = joint_error( data, os.path.join( result_results[i], "000.pkl" ), model_scale_to_meter_scale_factor, vp, joint_mapper, **cfg )
 
     with open( os.path.join( SMPLifyX_output_folder, "errors.pkl" ), 'wb' ) as handle:
         pickle.dump( errors, handle )
@@ -68,18 +71,24 @@ def evaluate_results(**args):
 
 
 def v2v_error( mesh_1, mesh_2 ):
-    mesh_1_vertices = trimesh.load_mesh(mesh_1).vertices
-    mesh_2_vertices = trimesh.load_mesh(mesh_2).vertices
 
-    norm1 = np.linalg.norm(mesh_1_vertices)
+    mesh_1_vertices = trimesh.load_mesh(mesh_1, process=False).vertices
+    mesh_2_vertices = trimesh.load_mesh(mesh_2, process=False).vertices
+
+    norm1 = np.linalg.norm(mesh_1_vertices - np.mean(mesh_1_vertices, 0) )
 
     mesh_1_vertices, mesh_2_vertices, _ = procrustes( mesh_1_vertices, mesh_2_vertices )
 
     v2v_error = np.linalg.norm( mesh_1_vertices-mesh_2_vertices, axis=1 ).mean()
 
-    return v2v_error
+    # multiply error by norm, to have it in meter scale
+    return v2v_error * norm1, norm1
 
-def joint_error( joints_1, joints_2, vp, joint_mapper, **args ):
+def joint_error( joints_1, joints_2, model_scale_to_meter_scale_factor, vp, joint_mapper, **args ):
+
+    # smplify-x outputs the results as float32, so we have to do everything in float32 here...
+    dtype=np.float32
+    torch_dtype=torch.float32
 
     model_path = args.pop("model_folder")
     model = smplx.create(model_path=model_path, joint_mapper=joint_mapper, **args)
@@ -99,17 +108,38 @@ def joint_error( joints_1, joints_2, vp, joint_mapper, **args ):
                 expression=torch.from_numpy(results["expression"]), 
                 transl=torch.from_numpy(results["camera_translation"]),
                 left_hand_pose=torch.from_numpy(results["left_hand_pose"]), 
-                right_hand_pose=torch.from_numpy(results["right_hand_pose"]) )
+                right_hand_pose=torch.from_numpy(results["right_hand_pose"]),
+                dtype=torch_dtype )
     results_joints = x.joints
 
-    joints_1 = joints_1['keypoints'][0]
-    joints_2 = results_joints.cpu().detach().numpy()[0]
+    # drop depth dimension: "We do not provide 3D keypoints (the 3D fields in the JSON file are due to legacy reasons). OpenPose needs 
+    # more than 1 view to lift 2D keypoints to 3D using multi-view information and triangulation. No multi-view information is available 
+    # here, only single-view." (https://github.com/vchoutas/smplify-x/issues/56#issuecomment-561791619) 
+    
+    ### project model model joints into pixel space
+    focal_length = args.get('focal_length')
+    camera = create_camera( focal_length_x=focal_length,
+                            focal_length_y=focal_length,
+                            center=torch.from_numpy( EHF_GT_CAMERA_CENTER),
+                            rotation=torch.from_numpy(results["camera_rotation"]),
+                            translation=torch.from_numpy(results["camera_translation"]),
+                            dtype=torch_dtype )
+    joints_2 = camera(results_joints).cpu().detach().numpy()[0]
 
-    norm1 = np.linalg.norm(joints_1)
+    # drop the third dimension
+    joints_1 = joints_1['keypoints'][0][:,:2]
+
+    norm2 = np.linalg.norm(joints_2 - np.mean(joints_2, 0) )
 
     joints_1, joints_2, _ = procrustes( joints_1, joints_2 )
 
     joint_error = np.linalg.norm( joints_1 - joints_2, axis=1 ).mean()
+
+    # scale the error into the model's original scale
+    joint_error *= norm2
+
+    # and now into meter scale
+    joint_error *= model_scale_to_meter_scale_factor
 
     return joint_error
 
