@@ -26,6 +26,20 @@ import torch
 import torch.nn as nn
 
 import neural_renderer as nr
+import trimesh
+from cv2 import Rodrigues
+#from matplotlib import pyplot as plt
+
+
+DEVICE = torch.device("cuda:0")
+
+EHF_IMAGE_SIZE = (1600,1200)
+EHF_CAMERA_POS = np.array([-0.03609917, 0.43416458, 2.37101226])
+EHF_K = np.array( [ [1498.22426237, 0.0,            790.263706], 
+                    [0.0,           1498.22426237,  578.90334 ], 
+                    [0.0,           0.0,            1.0       ], 
+                    ] )
+EHF_R = np.array( [-2.98747896, 0.01172457, -0.05704687] )
 
 def to_tensor(tensor, dtype=torch.float32):
     if torch.Tensor == type(tensor):
@@ -184,58 +198,34 @@ def smpl_to_openpose(model_type='smplx', use_hands=True, use_face=True,
         raise ValueError('Unknown joint format: {}'.format(openpose_format))
 
 
-def __rodrigues_formula( self, vector ):
-    vector_length = torch.norm(vector)
-    if ( 0.00000001 > vector_length ):
-        return I3
-    unit_norm_axis = vector / vector_length
-    skew_sym_mat = self.__skew_symmetric_matrix( unit_norm_axis )
-    return I3 + skew_sym_mat * torch.sin(vector_length) + skew_sym_mat.mm(skew_sym_mat) * ( 1.0 - torch.cos(vector_length) )
-
-def __skew_symmetric_matrix( self, x ):
-    a = torch.cross( x, I3_0 )
-    b = torch.cross( x, I3_1 )
-    c = torch.cross( x, I3_2 )
-    return torch.stack([a,b,c], dim=1)
-
-
 def render_mesh_to_depthmap( filename, dtype=torch.float32 ):
-
-    DEVICE = torch.device("cuda:0")
-
-    IMAGE_SIZE = (1920,1080)
     
-    vertices, faces = nr.load_obj(filename)
+    # the neural_renderer could load the meshes, but does it differently, which sometimes leads to offsets
+    mesh = trimesh.load_mesh(filename)
+    vertices = torch.tensor(mesh.vertices, dtype=dtype, device=DEVICE, requires_grad=False)
+    faces = torch.tensor(mesh.faces, dtype=torch.int, device=DEVICE, requires_grad=False)
     faces = faces.unsqueeze(0).expand(1, -1, -1)
 
-    camera_pos = np.array([-0.03609917, 0.43416458, 2.37101226])
-    camera_pos = torch.tensor(camera_pos, dtype=dtype, device=DEVICE, requires_grad=False)
+    camera_pos = torch.tensor(EHF_CAMERA_POS, dtype=dtype, device=DEVICE, requires_grad=False)
 
-    K = np.array( [ [1498.22426237, 0.0,            790.263706], 
-                    [0.0,           1498.22426237,  578.90334 ], 
-                    [0.0,           0.0,            1.0       ], 
-                    ] )
+    K = torch.tensor(EHF_K, dtype=dtype, device=DEVICE, requires_grad=False)
     t = camera_pos
 
-    R = np.array( [[-2.98747896], [ 0.01172457], [-0.05704687]] ).T
-    R = torch.tensor(R, dtype=dtype, device=DEVICE, requires_grad=False)
-    from smplx import lbs
-    R = lbs.batch_rodrigues(R).squeeze()
-
-    K = torch.tensor(K, dtype=dtype, device=DEVICE, requires_grad=False)
+    R_converted = np.zeros((3,3))
+    Rodrigues(EHF_R, R_converted)
+    R = torch.tensor(R_converted, dtype=dtype, device=DEVICE, requires_grad=False)
 
     K = K[None, :, :]
     R = R[None, :, :]
     t = t[None, :]
 
-    renderer = nr.Renderer(image_size=IMAGE_SIZE[0], orig_size=IMAGE_SIZE[0], anti_aliasing=False, K=K, R=R, t=t, near=0.1, far=5)
+    # the current version of neural_renderer can only return square images
+    renderer = nr.Renderer(image_size=EHF_IMAGE_SIZE[0], orig_size=EHF_IMAGE_SIZE[0], anti_aliasing=False, K=K, R=R, t=t, near=0.1, far=5)
 
     depth_img = renderer.render_depth(vertices,faces)
     
-    from matplotlib import pyplot as plt
     depth_img = np.array(depth_img.tolist()[0])
-    plt.imshow(depth_img.T.tolist(), cmap=plt.cm.gray_r)
-    plt.show()
-
+    #plt.imshow(depth_img.tolist(), cmap=plt.cm.gray_r)
+    #plt.show()
 
     return depth_img
