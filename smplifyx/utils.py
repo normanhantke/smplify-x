@@ -25,6 +25,19 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+import neural_renderer as nr
+import trimesh
+from cv2 import Rodrigues
+
+DEVICE = torch.device("cuda:0")
+
+EHF_IMAGE_SIZE = (1600,1200)
+EHF_CAMERA_POS = np.array([-0.03609917, 0.43416458, 2.37101226])
+EHF_K = np.array( [ [1498.22426237, 0.0,            790.263706], 
+                    [0.0,           1498.22426237,  578.90334 ], 
+                    [0.0,           0.0,            1.0       ], 
+                    ] )
+EHF_R = np.array( [-2.98747896, 0.01172457, -0.05704687] )
 
 def to_tensor(tensor, dtype=torch.float32):
     if torch.Tensor == type(tensor):
@@ -181,3 +194,34 @@ def smpl_to_openpose(model_type='smplx', use_hands=True, use_face=True,
             raise ValueError('Unknown model type: {}'.format(model_type))
     else:
         raise ValueError('Unknown joint format: {}'.format(openpose_format))
+
+
+def render_mesh_to_depthmap( filename, dtype=torch.float32 ):
+    
+    # the neural_renderer could load the meshes, but does it differently, which sometimes leads to offsets
+    mesh = trimesh.load_mesh(filename)
+    vertices = torch.tensor(mesh.vertices, dtype=dtype, device=DEVICE, requires_grad=False)
+    faces = torch.tensor(mesh.faces, dtype=torch.int, device=DEVICE, requires_grad=False)
+    faces = faces.unsqueeze(0).expand(1, -1, -1)
+
+    camera_pos = torch.tensor(EHF_CAMERA_POS, dtype=dtype, device=DEVICE, requires_grad=False)
+
+    K = torch.tensor(EHF_K, dtype=dtype, device=DEVICE, requires_grad=False)
+    t = camera_pos
+
+    R_converted = np.zeros((3,3))
+    Rodrigues(EHF_R, R_converted)
+    R = torch.tensor(R_converted, dtype=dtype, device=DEVICE, requires_grad=False)
+
+    K = K[None, :, :]
+    R = R[None, :, :]
+    t = t[None, :]
+
+    # the current version of neural_renderer can only return square images
+    renderer = nr.Renderer(image_size=EHF_IMAGE_SIZE[0], orig_size=EHF_IMAGE_SIZE[0], anti_aliasing=False, K=K, R=R, t=t, near=0.1, far=5)
+
+    depth_img = renderer.render_depth(vertices,faces)
+    
+    depth_img = np.array(depth_img.tolist()[0])
+
+    return depth_img
