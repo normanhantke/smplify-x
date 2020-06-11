@@ -28,8 +28,6 @@ import torch.nn as nn
 import neural_renderer as nr
 import trimesh
 from cv2 import Rodrigues
-#from matplotlib import pyplot as plt
-
 
 DEVICE = torch.device("cuda:0")
 
@@ -225,7 +223,5 @@ def render_mesh_to_depthmap( filename, dtype=torch.float32 ):
     depth_img = renderer.render_depth(vertices,faces)
     
     depth_img = np.array(depth_img.tolist()[0])
-    #plt.imshow(depth_img.tolist(), cmap=plt.cm.gray_r)
-    #plt.show()
 
     return depth_img
