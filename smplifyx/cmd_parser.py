@@ -252,6 +252,10 @@ def parse_config(argv=None):
                         type=lambda x: x.lower() in ['true', '1'],
                         help='Use the hand keypoints in the SMPL' +
                         'optimization process')
+    parser.add_argument('--use_depth', default=False,
+                        type=lambda x: x.lower() in ['true', '1'],
+                        help='Use the depth maps in the SMPL' +
+                        'optimization process')
     parser.add_argument('--use_face', default=False,
                         type=lambda x: x.lower() in ['true', '1'],
                         help='Use the facial keypoints in the optimization' +

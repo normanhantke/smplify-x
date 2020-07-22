@@ -107,6 +107,7 @@ class OpenPose(Dataset):
 
     def __init__(self, data_folder, img_folder='images',
                  keyp_folder='keypoints',
+                 depthmap_folder='depthmaps',
                  use_hands=False,
                  use_face=False,
                  dtype=torch.float32,
@@ -131,6 +132,7 @@ class OpenPose(Dataset):
 
         self.img_folder = osp.join(data_folder, img_folder)
         self.keyp_folder = osp.join(data_folder, keyp_folder)
+        self.depthmap_folder = osp.join(data_folder, depthmap_folder)
 
         self.img_paths = [osp.join(self.img_folder, img_fn)
                           for img_fn in os.listdir(self.img_folder)
@@ -187,6 +189,11 @@ class OpenPose(Dataset):
         if len(keyp_tuple.keypoints) < 1:
             return {}
         keypoints = np.stack(keyp_tuple.keypoints)
+
+
+        depthmap_fn = osp.join(self.depthmap_folder,
+                               img_fn + '_depthmap.pkl')
+        
 
         output_dict = {'fn': img_fn,
                        'img_path': img_path,

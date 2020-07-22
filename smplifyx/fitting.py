@@ -290,6 +290,7 @@ class SMPLifyLoss(nn.Module):
                  jaw_prior=None,
                  use_joints_conf=True,
                  use_face=True, use_hands=True,
+                 use_depth=True,
                  left_hand_prior=None, right_hand_prior=None,
                  interpenetration=True, dtype=torch.float32,
                  data_weight=1.0,
@@ -330,6 +331,8 @@ class SMPLifyLoss(nn.Module):
             self.expr_prior = expr_prior
             self.jaw_prior = jaw_prior
 
+        self.use_depth = use_depth
+
         self.register_buffer('data_weight',
                              torch.tensor(data_weight, dtype=dtype))
         self.register_buffer('body_pose_weight',
@@ -349,6 +352,9 @@ class SMPLifyLoss(nn.Module):
         if self.interpenetration:
             self.register_buffer('coll_loss_weight',
                                  torch.tensor(coll_loss_weight, dtype=dtype))
+        if self.use_depth:
+            self.register_buffer('depth_weight',
+                                  torch.tensor(depth_weight, dtype=dtype))
 
     def reset_loss_weights(self, loss_weight_dict):
         for key in loss_weight_dict:
@@ -377,6 +383,10 @@ class SMPLifyLoss(nn.Module):
         joint_diff = self.robustifier(gt_joints - projected_joints)
         joint_loss = (torch.sum(weights ** 2 * joint_diff) *
                       self.data_weight ** 2)
+
+        # Calculate the difference between the depth map of the current
+        # model and the depth map of the ground truth model
+        
 
         # Calculate the loss from the Pose prior
         if use_vposer:
