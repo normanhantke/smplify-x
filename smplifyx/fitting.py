@@ -216,10 +216,12 @@ class FittingMonitor(object):
     def create_fitting_closure(self,
                                optimizer, body_model, camera=None,
                                gt_joints=None, loss=None,
+                               gt_depthmap=None,
                                joints_conf=None,
                                joint_weights=None,
                                return_verts=True, return_full_pose=False,
                                use_vposer=False, vposer=None,
+                               use_depth=False,
                                pose_embedding=None,
                                create_graph=False,
                                **kwargs):
@@ -245,11 +247,13 @@ class FittingMonitor(object):
                                            return_full_pose=return_full_pose)
             total_loss = loss(body_model_output, camera=camera,
                               gt_joints=gt_joints,
+                              gt_depthmap=gt_depthmap,
                               body_model_faces=faces_tensor,
                               joints_conf=joints_conf,
                               joint_weights=joint_weights,
                               pose_embedding=pose_embedding,
                               use_vposer=use_vposer,
+                              use_depth=use_depth,
                               **kwargs)
 
             if backward:
@@ -294,6 +298,7 @@ class SMPLifyLoss(nn.Module):
                  left_hand_prior=None, right_hand_prior=None,
                  interpenetration=True, dtype=torch.float32,
                  data_weight=1.0,
+                 depth_weight=0.0,
                  body_pose_weight=0.0,
                  shape_weight=0.0,
                  bending_prior_weight=0.0,
@@ -387,6 +392,7 @@ class SMPLifyLoss(nn.Module):
         # Calculate the difference between the depth map of the current
         # model and the depth map of the ground truth model
         
+        utils.render_mesh_to_depthmap( body_model_output.vertices.squeeze(0).shape, body_model_faces.reshape(body_model_faces.shape[0]/3,3) )
 
         # Calculate the loss from the Pose prior
         if use_vposer:

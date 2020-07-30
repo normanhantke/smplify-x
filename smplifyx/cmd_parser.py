@@ -77,6 +77,8 @@ def parse_config(argv=None):
                         help='The folder where the images are stored')
     parser.add_argument('--keyp_folder', type=str, default='keypoints',
                         help='The folder where the keypoints are stored')
+    parser.add_argument('--depthmaps_folder', type=str, default='depthmaps',
+                        help='The folder where the depthmaps are stored')
     parser.add_argument('--summary_folder', type=str, default='summaries',
                         help='Where to store the TensorBoard summaries')
     parser.add_argument('--result_folder', type=str, default='results',

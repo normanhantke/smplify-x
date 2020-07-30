@@ -132,6 +132,7 @@ def main(**args):
 
     use_hands = args.get('use_hands', True)
     use_face = args.get('use_face', True)
+    use_depth = args.get('use_depth', False)
 
     body_pose_prior = create_prior(
         prior_type=args.get('body_prior_type'),
@@ -203,6 +204,8 @@ def main(**args):
         img = data['img']
         fn = data['fn']
         keypoints = data['keypoints']
+        if use_depth:
+            depthmap = data['depthmap']
         print('Processing: {}'.format(data['img_path']))
 
         curr_result_folder = osp.join(result_folder, fn)
@@ -242,24 +245,45 @@ def main(**args):
 
             out_img_fn = osp.join(curr_img_folder, 'output.png')
 
-            fit_single_frame(img, keypoints[[person_id]],
-                             body_model=body_model,
-                             camera=camera,
-                             joint_weights=joint_weights,
-                             dtype=dtype,
-                             output_folder=output_folder,
-                             result_folder=curr_result_folder,
-                             out_img_fn=out_img_fn,
-                             result_fn=curr_result_fn,
-                             mesh_fn=curr_mesh_fn,
-                             shape_prior=shape_prior,
-                             expr_prior=expr_prior,
-                             body_pose_prior=body_pose_prior,
-                             left_hand_prior=left_hand_prior,
-                             right_hand_prior=right_hand_prior,
-                             jaw_prior=jaw_prior,
-                             angle_prior=angle_prior,
-                             **args)
+            if use_depth:
+                fit_single_frame(img, keypoints[[person_id]],
+                                 depthmap=depthmap,
+                                 body_model=body_model,
+                                 camera=camera,
+                                 joint_weights=joint_weights,
+                                 dtype=dtype,
+                                 output_folder=output_folder,
+                                 result_folder=curr_result_folder,
+                                 out_img_fn=out_img_fn,
+                                 result_fn=curr_result_fn,
+                                 mesh_fn=curr_mesh_fn,
+                                 shape_prior=shape_prior,
+                                 expr_prior=expr_prior,
+                                 body_pose_prior=body_pose_prior,
+                                 left_hand_prior=left_hand_prior,
+                                 right_hand_prior=right_hand_prior,
+                                 jaw_prior=jaw_prior,
+                                 angle_prior=angle_prior,
+                                 **args)
+            else:
+                fit_single_frame(img, keypoints[[person_id]],
+                                 body_model=body_model,
+                                 camera=camera,
+                                 joint_weights=joint_weights,
+                                 dtype=dtype,
+                                 output_folder=output_folder,
+                                 result_folder=curr_result_folder,
+                                 out_img_fn=out_img_fn,
+                                 result_fn=curr_result_fn,
+                                 mesh_fn=curr_mesh_fn,
+                                 shape_prior=shape_prior,
+                                 expr_prior=expr_prior,
+                                 body_pose_prior=body_pose_prior,
+                                 left_hand_prior=left_hand_prior,
+                                 right_hand_prior=right_hand_prior,
+                                 jaw_prior=jaw_prior,
+                                 angle_prior=angle_prior,
+                                 **args)
 
     elapsed = time.time() - start
     time_msg = time.strftime('%H hours, %M minutes, %S seconds',

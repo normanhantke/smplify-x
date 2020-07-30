@@ -36,6 +36,11 @@ from torch.utils.data import Dataset
 
 from utils import smpl_to_openpose
 
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
+
 Keypoints = namedtuple('Keypoints',
                        ['keypoints', 'gender_gt', 'gender_pd'])
 
@@ -107,9 +112,10 @@ class OpenPose(Dataset):
 
     def __init__(self, data_folder, img_folder='images',
                  keyp_folder='keypoints',
-                 depthmap_folder='depthmaps',
+                 depthmaps_folder='depthmaps',
                  use_hands=False,
                  use_face=False,
+                 use_depth=False,
                  dtype=torch.float32,
                  model_type='smplx',
                  joints_to_ign=None,
@@ -120,6 +126,7 @@ class OpenPose(Dataset):
 
         self.use_hands = use_hands
         self.use_face = use_face
+        self.use_depth = use_depth
         self.model_type = model_type
         self.dtype = dtype
         self.joints_to_ign = joints_to_ign
@@ -132,7 +139,7 @@ class OpenPose(Dataset):
 
         self.img_folder = osp.join(data_folder, img_folder)
         self.keyp_folder = osp.join(data_folder, keyp_folder)
-        self.depthmap_folder = osp.join(data_folder, depthmap_folder)
+        self.depthmaps_folder = osp.join(data_folder, depthmaps_folder)
 
         self.img_paths = [osp.join(self.img_folder, img_fn)
                           for img_fn in os.listdir(self.img_folder)
@@ -190,14 +197,17 @@ class OpenPose(Dataset):
             return {}
         keypoints = np.stack(keyp_tuple.keypoints)
 
-
-        depthmap_fn = osp.join(self.depthmap_folder,
-                               img_fn + '_depthmap.pkl')
-        
+        if self.use_depth:
+            depthmap_fn = osp.join(self.depthmaps_folder,
+                                   img_fn + '_depthmap.pkl')
+            with open(depthmap_fn, 'rb') as f:
+                depthmap = pickle.load(f)
 
         output_dict = {'fn': img_fn,
                        'img_path': img_path,
-                       'keypoints': keypoints, 'img': img}
+                       'keypoints': keypoints,
+                       'img': img,
+                       'depthmap' : depthmap}
         if keyp_tuple.gender_gt is not None:
             if len(keyp_tuple.gender_gt) > 0:
                 output_dict['gender_gt'] = keyp_tuple.gender_gt

@@ -58,6 +58,7 @@ def fit_single_frame(img,
                      shape_prior,
                      expr_prior,
                      angle_prior,
+                     depthmap=None,
                      result_fn='out.pkl',
                      mesh_fn='out.obj',
                      out_img_fn='overlay.png',
@@ -66,7 +67,9 @@ def fit_single_frame(img,
                      init_joints_idxs=(9, 12, 2, 5),
                      use_face=True,
                      use_hands=True,
+                     use_depth=False,
                      data_weights=None,
+                     depth_weights=None,
                      body_pose_prior_weights=None,
                      hand_pose_prior_weights=None,
                      jaw_pose_prior_weights=None,
@@ -177,6 +180,15 @@ def fit_single_frame(img,
     assert (len(coll_loss_weights) ==
             len(body_pose_prior_weights)), msg
 
+    if use_depth:
+        if depth_weights is None:
+            # TODO: set this to the best weights found in the end
+            depth_weights = [1, ] * 5
+        msg = ('Number of Body pose prior weights does not match the' +
+               ' number of depth weights')
+        assert (len(depth_weights) ==
+                len(body_pose_prior_weights)), msg
+
     use_vposer = kwargs.get('use_vposer', True)
     vposer, pose_embedding = [None, ] * 2
     if use_vposer:
@@ -204,6 +216,9 @@ def fit_single_frame(img,
     gt_joints = gt_joints.to(device=device, dtype=dtype)
     if use_joints_conf:
         joints_conf = joints_conf.to(device=device, dtype=dtype)
+
+    if use_depth:
+        gt_depthmap = torch.tensor(depthmap, dtype=dtype)
 
     # Create the search tree
     search_tree = None
@@ -252,6 +267,9 @@ def fit_single_frame(img,
         opt_weights_dict['hand_prior_weight'] = hand_pose_prior_weights
     if interpenetration:
         opt_weights_dict['coll_loss_weight'] = coll_loss_weights
+    if use_depth:
+        opt_weights_dict['depth_weight'] = depth_weights
+
 
     keys = opt_weights_dict.keys()
     opt_weights = [dict(zip(keys, vals)) for vals in
@@ -285,6 +303,7 @@ def fit_single_frame(img,
                                rho=rho,
                                use_joints_conf=use_joints_conf,
                                use_face=use_face, use_hands=use_hands,
+                               use_depth=use_depth,
                                vposer=vposer,
                                pose_embedding=pose_embedding,
                                body_pose_prior=body_pose_prior,
@@ -422,15 +441,31 @@ def fit_single_frame(img,
                     joint_weights[:, 67:] = curr_weights['face_weight']
                 loss.reset_loss_weights(curr_weights)
 
-                closure = monitor.create_fitting_closure(
-                    body_optimizer, body_model,
-                    camera=camera, gt_joints=gt_joints,
-                    joints_conf=joints_conf,
-                    joint_weights=joint_weights,
-                    loss=loss, create_graph=body_create_graph,
-                    use_vposer=use_vposer, vposer=vposer,
-                    pose_embedding=pose_embedding,
-                    return_verts=True, return_full_pose=True)
+                if use_depth: 
+                    closure = monitor.create_fitting_closure(
+                        body_optimizer, body_model,
+                        camera=camera, gt_joints=gt_joints,
+                        gt_depthmap=gt_depthmap,
+                        joints_conf=joints_conf,
+                        joint_weights=joint_weights,
+                        loss=loss, create_graph=body_create_graph,
+                        use_vposer=use_vposer, 
+                        use_depth=use_depth,
+                        vposer=vposer,
+                        pose_embedding=pose_embedding,
+                        return_verts=True, return_full_pose=True)
+                else:
+                    closure = monitor.create_fitting_closure(
+                        body_optimizer, body_model,
+                        camera=camera, gt_joints=gt_joints,
+                        joints_conf=joints_conf,
+                        joint_weights=joint_weights,
+                        loss=loss, create_graph=body_create_graph,
+                        use_vposer=use_vposer, 
+                        use_depth=use_depth,
+                        vposer=vposer,
+                        pose_embedding=pose_embedding,
+                        return_verts=True, return_full_pose=True)
 
                 if interactive:
                     if use_cuda and torch.cuda.is_available():
