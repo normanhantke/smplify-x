@@ -361,6 +361,8 @@ class SMPLifyLoss(nn.Module):
             self.register_buffer('depth_weight',
                                   torch.tensor(depth_weight, dtype=dtype))
 
+        self.renderer = utils.Renderer()
+
     def reset_loss_weights(self, loss_weight_dict):
         for key in loss_weight_dict:
             if hasattr(self, key):
@@ -376,6 +378,7 @@ class SMPLifyLoss(nn.Module):
     def forward(self, body_model_output, camera, gt_joints, joints_conf,
                 body_model_faces, joint_weights,
                 use_vposer=False, pose_embedding=None,
+                use_depth=False, gt_depthmap=None,
                 **kwargs):
         projected_joints = camera(body_model_output.joints)
         # Calculate the weights for each joints
@@ -389,10 +392,18 @@ class SMPLifyLoss(nn.Module):
         joint_loss = (torch.sum(weights ** 2 * joint_diff) *
                       self.data_weight ** 2)
 
-        # Calculate the difference between the depth map of the current
-        # model and the depth map of the ground truth model
-        
-        utils.render_mesh_to_depthmap( body_model_output.vertices.squeeze(0).shape, body_model_faces.reshape(body_model_faces.shape[0]/3,3) )
+        if use_depth and not gt_depthmap is None: 
+            # Calculate the difference between the depth map of the current
+            # model and the depth map of the ground truth model
+            vertices = body_model_output.vertices
+            faces = body_model_faces.reshape(int(body_model_faces.shape[0]/3),3)
+            faces = faces[None, :, :]
+            depthmap = self.renderer.render_smpl_to_depthmap( vertices, faces.int() )
+            mse = torch.nn.MSELoss()
+            depth_loss = mse( depthmap, gt_depthmap ) * self.depth_weight
+        else:
+            depth_loss = 0
+
 
         # Calculate the loss from the Pose prior
         if use_vposer:
@@ -461,7 +472,8 @@ class SMPLifyLoss(nn.Module):
         total_loss = (joint_loss + pprior_loss + shape_loss +
                       angle_prior_loss + pen_loss +
                       jaw_prior_loss + expression_loss +
-                      left_hand_prior_loss + right_hand_prior_loss)
+                      left_hand_prior_loss + right_hand_prior_loss +
+                      depth_loss)
         return total_loss
 
 

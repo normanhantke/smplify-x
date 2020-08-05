@@ -219,6 +219,7 @@ def fit_single_frame(img,
 
     if use_depth:
         gt_depthmap = torch.tensor(depthmap, dtype=dtype)
+        gt_depthmap = gt_depthmap.to(device=device, dtype=dtype)
 
     # Create the search tree
     search_tree = None

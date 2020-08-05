@@ -31,7 +31,8 @@ from cv2 import Rodrigues
 
 DEVICE = torch.device("cuda:0")
 
-EHF_IMAGE_SIZE = (1600,1200)
+#EHF_IMAGE_SIZE = (1600,1200)
+EHF_IMAGE_SIZE = (512,424)
 EHF_CAMERA_POS = np.array([-0.03609917, 0.43416458, 2.37101226])
 EHF_K = np.array( [ [1498.22426237, 0.0,            790.263706], 
                     [0.0,           1498.22426237,  578.90334 ], 
@@ -226,35 +227,36 @@ def render_mesh_to_depthmap( filename, dtype=torch.float32 ):
 
     return depth_img
 
-def render_smpl_to_depthmap( vertices, faces, dtype=torch.float32 ):
-    
-    # the neural_renderer could load the meshes, but does it differently, which sometimes leads to offsets
-    #mesh = trimesh.load_mesh(filename)
-    #vertices = torch.tensor(mesh.vertices, dtype=dtype, device=DEVICE, requires_grad=False)
-    #faces = torch.tensor(mesh.faces, dtype=torch.int, device=DEVICE, requires_grad=False)
-    #faces = faces.unsqueeze(0).expand(1, -1, -1)
-
-
-    # TODO make these tensor things global so they dont get remade every iteration
-    # update: no, not global. make a renderer class!
-    camera_pos = torch.tensor(EHF_CAMERA_POS, dtype=dtype, device=DEVICE, requires_grad=False)
-
-    K = torch.tensor(EHF_K, dtype=dtype, device=DEVICE, requires_grad=False)
-    t = camera_pos
-
+class Renderer():
+  def __init__( self, image_size = (512,424),
+                camera_pos = np.array([-0.03609917, 0.43416458, 2.37101226]),
+                K = np.array( [ [1498.22426237, 0.0,            790.263706], 
+                                    [0.0,           1498.22426237,  578.90334 ], 
+                                    [0.0,           0.0,            1.0       ], 
+                                  ] ),
+                R = np.array( [-2.98747896, 0.01172457, -0.05704687] ),
+                near = 0.1,
+                far = 5,
+                dtype=torch.float32
+                ):
+    t = torch.tensor(camera_pos, dtype=dtype, device=DEVICE, requires_grad=False)
+    K = torch.tensor(K, dtype=dtype, device=DEVICE, requires_grad=False)
     R_converted = np.zeros((3,3))
-    Rodrigues(EHF_R, R_converted)
+    Rodrigues(R, R_converted)
     R = torch.tensor(R_converted, dtype=dtype, device=DEVICE, requires_grad=False)
+    self.K = K[None, :, :]
+    self.R = R[None, :, :]
+    self.t = t[None, :]
+    self.image_size = image_size
+    self.near = near
+    self.far = far
+    self.dtype=dtype
+    self.renderer = nr.Renderer(image_size=self.image_size[0], orig_size=self.image_size[0], anti_aliasing=False, K=self.K, R=self.R, t=self.t, near=self.near, far=self.far)
 
-    K = K[None, :, :]
-    R = R[None, :, :]
-    t = t[None, :]
+  def render_smpl_to_depthmap( self, vertices, faces ):
+      
+      # the current version of neural_renderer can only return square images
 
-    # the current version of neural_renderer can only return square images
-    renderer = nr.Renderer(image_size=EHF_IMAGE_SIZE[0], orig_size=EHF_IMAGE_SIZE[0], anti_aliasing=False, K=K, R=R, t=t, near=0.1, far=5)
-
-    depth_img = renderer.render_depth(vertices,faces)
-    
-    depth_img = np.array(depth_img.tolist()[0])
-
-    return depth_img
+      depth_img = self.renderer.render_depth(vertices,faces)
+      
+      return depth_img.squeeze(0)
