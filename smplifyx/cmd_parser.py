@@ -196,6 +196,9 @@ def parse_config(argv=None):
     parser.add_argument('--data_weights', nargs='*',
                         default=[1, ] * 5, type=float,
                         help='The weight of the data term')
+    parser.add_argument('--depth_weights', nargs='*',
+                        default=[1, ] * 5, type=float,
+                        help='The weight of the depthmaps term')
     parser.add_argument('--body_pose_prior_weights',
                         default=[4.04 * 1e2, 4.04 * 1e2, 57.4, 4.78],
                         nargs='*',

@@ -15,6 +15,10 @@ def generate_depthmaps(**args):
     output_folder = args.pop('output_folder')
     output_folder = osp.expandvars(output_folder)
 
+    image_size = int(args.pop("image_size"))
+    if image_size == None:
+        image_size=1600
+
     if not os.path.exists( output_folder ):
         os.makedirs(       output_folder )
 
@@ -23,8 +27,8 @@ def generate_depthmaps(**args):
 
     for i in range( len(ground_truth_meshes) ):
         print("Calculating depthmap #", i)
-        depthmap = utils.render_mesh_to_depthmap( ground_truth_meshes[i] )
-        filename = osp.join(output_folder, str(i).zfill(2) + "_img_depthmap.pkl" )
+        depthmap = utils.render_mesh_to_depthmap( ground_truth_meshes[i], image_size=image_size )
+        filename = osp.join(output_folder, str(i+1).zfill(2) + "_img_depthmap.pkl" )
         with open( filename, 'wb') as f:
             pickle.dump( depthmap, f )
 
@@ -46,6 +50,9 @@ def parse_config(argv=None):
     parser.add_argument('--output_folder',
                         required=True,
                         help='The output directory where the depthmaps are stored, for example the dataset folder that also contains the images and keypoints folders.')
+    parser.add_argument('--image_size',
+                        required=False,
+                        help='Image size of the depthmaps.')
     args = parser.parse_args()
     args_dict = vars(args)
     return args_dict
