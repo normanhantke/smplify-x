@@ -393,12 +393,37 @@ class SMPLifyLoss(nn.Module):
                       self.data_weight ** 2)
 
         if use_depth and not gt_depthmap is None: 
+
+#class myTorchKDTree(Function): 
+#    @staticmethod 
+#    def forward(ctx, input, gt_pointcloud): 
+#        np_gt_pc = gt_pointcloud.clone().detach().numpy()
+#        np_model_pc = input.clone().detach().numpy() 
+#        # TODO procrustes 
+#        tree = KDTree(np_gt_pc) 
+#        nn_indices = tree.query(np_model_pc)[1]
+#        return nn_indices 
+#              
+#    @staticmethod 
+#    def backward(ctx, grad_output): 
+#        np_grad_output = grad_output.clone().detach().numpy() 
+                                                     
+
             # Calculate the difference between the depth map of the current
             # model and the depth map of the ground truth model
             vertices = body_model_output.vertices
             faces = body_model_faces.reshape(int(body_model_faces.shape[0]/3),3)
             faces = faces[None, :, :]
             depthmap = self.renderer.render_smpl_to_depthmap( vertices, faces.int() )
+            
+i = torch.LongTensor((t>-10).nonzero())                     
+i = torch.tensor(i, dtype=torch.float64)
+torch.cat(( i, torch.masked_select(t, t>-10 ) ), dim=1)
+
+            # TODO generalize the -100
+            x_gt, y_gt = torch.where(gt_depthmap>-100)
+            gt_pointcloud = 
+
             mse = torch.nn.MSELoss()
             depth_loss = mse( depthmap, gt_depthmap ) * self.depth_weight
         else:
