@@ -251,7 +251,7 @@ class Renderer():
     self.near = near
     self.far = far
     self.dtype=dtype
-    self.renderer = nr.Renderer(image_size=self.image_size[0], orig_size=self.image_size[0], anti_aliasing=False, K=self.K, R=self.R, t=self.t, near=self.near, far=self.far)
+    self.renderer = nr.Renderer(image_size=self.image_size[0], orig_size=1600, anti_aliasing=False, K=self.K, R=self.R, t=self.t, near=self.near, far=self.far)
 
   def render_smpl_to_depthmap( self, vertices, faces ):
       

@@ -32,6 +32,13 @@ import torch.nn as nn
 from mesh_viewer import MeshViewer
 import utils
 
+def pairwise_dist(xyz1, xyz2):
+    r_xyz1 = torch.sum(xyz1 * xyz1, dim=2, keepdim=True)  # (B,N,1)
+    r_xyz2 = torch.sum(xyz2 * xyz2, dim=2, keepdim=True)  # (B,M,1)
+    mul = torch.matmul(xyz2, xyz1.permute(0,2,1))         # (B,M,N)
+    dist = r_xyz2 - 2 * mul + r_xyz1.permute(0,2,1)       # (B,M,N)
+    return dist
+
 
 @torch.no_grad()
 def guess_init(model,
@@ -361,7 +368,7 @@ class SMPLifyLoss(nn.Module):
             self.register_buffer('depth_weight',
                                   torch.tensor(depth_weight, dtype=dtype))
 
-        self.renderer = utils.Renderer()
+        self.renderer = utils.Renderer( image_size=(512,424) )
 
     def reset_loss_weights(self, loss_weight_dict):
         for key in loss_weight_dict:
@@ -394,38 +401,29 @@ class SMPLifyLoss(nn.Module):
 
         if use_depth and not gt_depthmap is None: 
 
-#class myTorchKDTree(Function): 
-#    @staticmethod 
-#    def forward(ctx, input, gt_pointcloud): 
-#        np_gt_pc = gt_pointcloud.clone().detach().numpy()
-#        np_model_pc = input.clone().detach().numpy() 
-#        # TODO procrustes 
-#        tree = KDTree(np_gt_pc) 
-#        nn_indices = tree.query(np_model_pc)[1]
-#        return nn_indices 
-#              
-#    @staticmethod 
-#    def backward(ctx, grad_output): 
-#        np_grad_output = grad_output.clone().detach().numpy() 
-                                                     
-
             # Calculate the difference between the depth map of the current
             # model and the depth map of the ground truth model
             vertices = body_model_output.vertices
             faces = body_model_faces.reshape(int(body_model_faces.shape[0]/3),3)
             faces = faces[None, :, :]
             depthmap = self.renderer.render_smpl_to_depthmap( vertices, faces.int() )
+
+            # TODO generalize the 100
+            gt_depthmap_non_background_coords = (gt_depthmap<100).nonzero()
+            gt_depthmap_non_background_coords = gt_depthmap_non_background_coords.type( dtype=gt_depthmap.dtype )
+            gt_pointcloud = torch.cat((gt_depthmap_non_background_coords, torch.masked_select(gt_depthmap, gt_depthmap<100).unsqueeze(1)), dim=1)
+
+            bm_depthmap_non_background_coords = (depthmap<100).nonzero()
+            bm_depthmap_non_background_coords = bm_depthmap_non_background_coords.type( dtype=depthmap.dtype )
+            bm_pointcloud = torch.cat((bm_depthmap_non_background_coords, torch.masked_select(depthmap, depthmap<100).unsqueeze(1)), dim=1)
             
-i = torch.LongTensor((t>-10).nonzero())                     
-i = torch.tensor(i, dtype=torch.float64)
-torch.cat(( i, torch.masked_select(t, t>-10 ) ), dim=1)
+            # TODO calculate correspondencies in procrustes space 
 
-            # TODO generalize the -100
-            x_gt, y_gt = torch.where(gt_depthmap>-100)
-            gt_pointcloud = 
+            dist = pairwise_dist(gt_pointcloud.unsqueeze(0), bm_pointcloud.unsqueeze(0))
+            values1, indices1 = dist.min(dim=-1)
+            values2, indices2 = dist.min(dim=-2)
 
-            mse = torch.nn.MSELoss()
-            depth_loss = mse( depthmap, gt_depthmap ) * self.depth_weight
+            depth_loss = ( values1.mean() + values2.mean() ) * self.depth_weight / 2
         else:
             depth_loss = 0
 
