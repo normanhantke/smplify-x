@@ -32,12 +32,37 @@ import torch.nn as nn
 from mesh_viewer import MeshViewer
 import utils
 
-def pairwise_dist(xyz1, xyz2):
-    r_xyz1 = torch.sum(xyz1 * xyz1, dim=2, keepdim=True)  # (B,N,1)
-    r_xyz2 = torch.sum(xyz2 * xyz2, dim=2, keepdim=True)  # (B,M,1)
-    mul = torch.matmul(xyz2, xyz1.permute(0,2,1))         # (B,M,N)
-    dist = r_xyz2 - 2 * mul + r_xyz1.permute(0,2,1)       # (B,M,N)
-    return dist
+from scipy.spatial import cKDTree
+
+# this implementation assumes that one of the point clouds does not require_grad
+class KdTreeDistances(torch.autograd.Function):   
+    @staticmethod   
+    def forward(ctx, pc1, pc2):  
+        np_pc1 = pc1.clone().detach().cpu().numpy()  
+        np_pc2 = pc2.clone().detach().cpu().numpy()  
+
+        # TODO procrustes ? 
+        tree = cKDTree(np_pc1)  
+        distances, indices = tree.query(np_pc2)   
+        nn_indices = torch.tensor(indices, dtype=torch.long, device=pc2.device)  
+        nn_distances = torch.tensor(distances, dtype=pc2.dtype, device=pc2.device, requires_grad=True)  
+        ctx.save_for_backward(nn_distances, nn_indices, pc1, pc2)  
+        return nn_distances  
+              
+    @staticmethod   
+    def backward(ctx, grad_output):   
+        distances, indices, pc1, pc2 = ctx.saved_tensors  
+        selected_pc1 = pc1[indices] 
+
+        grad2 = (pc2 - selected_pc1) / distances.expand(3,-1).transpose(1,0) 
+
+        if( pc1.requires_grad == False ):
+            result = grad2*grad_output.expand(3,-1).transpose(1,0)
+            return None, result
+        else: 
+            grad1 = torch.zeros(pc1.shape, device=grad2.device, dtype=grad2.dtype) 
+            grad1.index_add_(0, indices.cuda(), grad2 * grad_output.expand(3,-1).transpose(1,0))
+            return -grad1, None
 
 
 @torch.no_grad()
@@ -416,14 +441,11 @@ class SMPLifyLoss(nn.Module):
             bm_depthmap_non_background_coords = (depthmap<100).nonzero()
             bm_depthmap_non_background_coords = bm_depthmap_non_background_coords.type( dtype=depthmap.dtype )
             bm_pointcloud = torch.cat((bm_depthmap_non_background_coords, torch.masked_select(depthmap, depthmap<100).unsqueeze(1)), dim=1)
-            
-            # TODO calculate correspondencies in procrustes space 
 
-            dist = pairwise_dist(gt_pointcloud.unsqueeze(0), bm_pointcloud.unsqueeze(0))
-            values1, indices1 = dist.min(dim=-1)
-            values2, indices2 = dist.min(dim=-2)
+            dist1 = KdTreeDistances.apply(gt_pointcloud, bm_pointcloud)
+            dist2 = KdTreeDistances.apply(bm_pointcloud, gt_pointcloud)
 
-            depth_loss = ( values1.mean() + values2.mean() ) * self.depth_weight / 2
+            depth_loss = ( dist1.mean() + dist2.mean() ) * self.depth_weight / 2
         else:
             depth_loss = 0
 
