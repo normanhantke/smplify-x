@@ -228,7 +228,7 @@ def render_mesh_to_depthmap( filename, image_size=(512,424), orig_size=(1600,120
     return depth_img
 
 class Renderer():
-  def __init__( self, image_size = (512,424), orig_size=(1600,1200)
+  def __init__( self, image_size = (512,424), orig_size=(1600,1200),
                 camera_pos = np.array([-0.03609917, 0.43416458, 2.37101226]),
                 K = np.array( [ [1498.22426237, 0.0,            790.263706], 
                                     [0.0,           1498.22426237,  578.90334 ], 

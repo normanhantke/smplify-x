@@ -444,10 +444,14 @@ class SMPLifyLoss(nn.Module):
             bm_depthmap_non_background_coords = bm_depthmap_non_background_coords.type( dtype=depthmap.dtype )
             bm_pointcloud = torch.cat((bm_depthmap_non_background_coords, torch.masked_select(depthmap, depthmap<depthmap_background_threshold).unsqueeze(1)), dim=1)
 
-            dist1 = KdTreeDistances.apply(gt_pointcloud, bm_pointcloud)
-            dist2 = KdTreeDistances.apply(bm_pointcloud, gt_pointcloud)
+            if ( len(gt_pointcloud) == 0 or len(bm_pointcloud) == 0 ):
+              # the model is not in view, make some very big loss
+              depthloss = depthmap_background_threshold * depthmap.shape[0] * depthmap.shape[1] * self.depth_weight
+            else:
+              dist1 = KdTreeDistances.apply(gt_pointcloud, bm_pointcloud)
+              dist2 = KdTreeDistances.apply(bm_pointcloud, gt_pointcloud)
 
-            depth_loss = ( dist1.mean() + dist2.mean() ) * self.depth_weight / 2
+              depth_loss = ( dist1.mean() + dist2.mean() ) * self.depth_weight / 2
         else:
             depth_loss = 0
 

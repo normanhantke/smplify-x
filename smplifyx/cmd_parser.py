@@ -288,11 +288,11 @@ def parse_config(argv=None):
                         help='The maximum iterations for the optimization')
     parser.add_argument('--orig_image_size',
                         default=[1600,1200],
-                        type=int, nargs='2',
+                        type=int, nargs=2,
                         help='The size of the RGB images')
     parser.add_argument('--depthmaps_size',
                         default=[512,424],
-                        type=int, nargs='2',
+                        type=int, nargs=2,
                         help='The size of the depthmaps')
     parser.add_argument('--depthmap_background_threshold', default=100, type=int,
                         help='Threshold value beyond which depthmap pixels are'+

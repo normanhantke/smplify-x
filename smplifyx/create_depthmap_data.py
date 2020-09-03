@@ -52,11 +52,11 @@ def parse_config(argv=None):
                         help='The output directory where the depthmaps are stored, for example the dataset folder that also contains the images and keypoints folders.')
     parser.add_argument('--image_size',
                         default=[512,424],
-                        type=int, nargs='2',
+                        type=int, nargs=2,
                         help='Image size of the depthmaps.')
     parser.add_argument('--orig_image_size',
                         default=[1600,1200],
-                        type=int, nargs='2',
+                        type=int, nargs=2,
                         help='The size of the RGB images')
 
     args = parser.parse_args()
