@@ -197,7 +197,7 @@ def smpl_to_openpose(model_type='smplx', use_hands=True, use_face=True,
         raise ValueError('Unknown joint format: {}'.format(openpose_format))
 
 
-def render_mesh_to_depthmap( filename, image_size=1600, dtype=torch.float32 ):
+def render_mesh_to_depthmap( filename, image_size=(512,424), orig_size=(1600,1200), dtype=torch.float32 ):
     
     # the neural_renderer could load the meshes, but does it differently, which sometimes leads to offsets
     mesh = trimesh.load_mesh(filename)
@@ -219,7 +219,7 @@ def render_mesh_to_depthmap( filename, image_size=1600, dtype=torch.float32 ):
     t = t[None, :]
 
     # the current version of neural_renderer can only return square images
-    renderer = nr.Renderer(image_size=image_size, orig_size=1600, anti_aliasing=False, K=K, R=R, t=t, near=0.1, far=5)
+    renderer = nr.Renderer(image_size=image_size[0], orig_size=orig_size[0], anti_aliasing=False, K=K, R=R, t=t, near=0.1, far=5)
 
     depth_img = renderer.render_depth(vertices,faces)
     
@@ -228,7 +228,7 @@ def render_mesh_to_depthmap( filename, image_size=1600, dtype=torch.float32 ):
     return depth_img
 
 class Renderer():
-  def __init__( self, image_size = (512,424),
+  def __init__( self, image_size = (512,424), orig_size=(1600,1200)
                 camera_pos = np.array([-0.03609917, 0.43416458, 2.37101226]),
                 K = np.array( [ [1498.22426237, 0.0,            790.263706], 
                                     [0.0,           1498.22426237,  578.90334 ], 
@@ -251,7 +251,7 @@ class Renderer():
     self.near = near
     self.far = far
     self.dtype=dtype
-    self.renderer = nr.Renderer(image_size=self.image_size[0], orig_size=1600, anti_aliasing=False, K=self.K, R=self.R, t=self.t, near=self.near, far=self.far)
+    self.renderer = nr.Renderer(image_size=self.image_size[0], orig_size=orig_size[0], anti_aliasing=False, K=self.K, R=self.R, t=self.t, near=self.near, far=self.far)
 
   def render_smpl_to_depthmap( self, vertices, faces ):
       

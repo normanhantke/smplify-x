@@ -338,6 +338,8 @@ class SMPLifyLoss(nn.Module):
                  expr_prior_weight=0.0, jaw_prior_weight=0.0,
                  coll_loss_weight=0.0,
                  reduction='sum',
+                 image_size=[512,424],
+                 orig_size=[1600,1200],
                  **kwargs):
 
         super(SMPLifyLoss, self).__init__()
@@ -393,7 +395,7 @@ class SMPLifyLoss(nn.Module):
             self.register_buffer('depth_weight',
                                   torch.tensor(depth_weight, dtype=dtype))
 
-        self.renderer = utils.Renderer( image_size=(512,424) )
+        self.renderer = utils.Renderer( image_size=image_size, orig_size=orig_size )
 
     def reset_loss_weights(self, loss_weight_dict):
         for key in loss_weight_dict:
@@ -411,6 +413,7 @@ class SMPLifyLoss(nn.Module):
                 body_model_faces, joint_weights,
                 use_vposer=False, pose_embedding=None,
                 use_depth=False, gt_depthmap=None,
+                depthmap_background_threshold=100,
                 **kwargs):
         projected_joints = camera(body_model_output.joints)
         # Calculate the weights for each joints
@@ -433,14 +436,13 @@ class SMPLifyLoss(nn.Module):
             faces = faces[None, :, :]
             depthmap = self.renderer.render_smpl_to_depthmap( vertices, faces.int() )
 
-            # TODO generalize the 100
-            gt_depthmap_non_background_coords = (gt_depthmap<100).nonzero()
+            gt_depthmap_non_background_coords = (gt_depthmap<depthmap_background_threshold).nonzero()
             gt_depthmap_non_background_coords = gt_depthmap_non_background_coords.type( dtype=gt_depthmap.dtype )
-            gt_pointcloud = torch.cat((gt_depthmap_non_background_coords, torch.masked_select(gt_depthmap, gt_depthmap<100).unsqueeze(1)), dim=1)
+            gt_pointcloud = torch.cat((gt_depthmap_non_background_coords, torch.masked_select(gt_depthmap, gt_depthmap<depthmap_background_threshold).unsqueeze(1)), dim=1)
 
-            bm_depthmap_non_background_coords = (depthmap<100).nonzero()
+            bm_depthmap_non_background_coords = (depthmap<depthmap_background_threshold).nonzero()
             bm_depthmap_non_background_coords = bm_depthmap_non_background_coords.type( dtype=depthmap.dtype )
-            bm_pointcloud = torch.cat((bm_depthmap_non_background_coords, torch.masked_select(depthmap, depthmap<100).unsqueeze(1)), dim=1)
+            bm_pointcloud = torch.cat((bm_depthmap_non_background_coords, torch.masked_select(depthmap, depthmap<depthmap_background_threshold).unsqueeze(1)), dim=1)
 
             dist1 = KdTreeDistances.apply(gt_pointcloud, bm_pointcloud)
             dist2 = KdTreeDistances.apply(bm_pointcloud, gt_pointcloud)
