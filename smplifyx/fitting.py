@@ -446,7 +446,7 @@ class SMPLifyLoss(nn.Module):
 
             if ( len(gt_pointcloud) == 0 or len(bm_pointcloud) == 0 ):
               # the model is not in view, make some very big loss
-              depthloss = depthmap_background_threshold * depthmap.shape[0] * depthmap.shape[1] * self.depth_weight
+              depth_loss = depthmap_background_threshold * depthmap.shape[0] * depthmap.shape[1] * self.depth_weight
             else:
               dist1 = KdTreeDistances.apply(gt_pointcloud, bm_pointcloud)
               dist2 = KdTreeDistances.apply(bm_pointcloud, gt_pointcloud)
